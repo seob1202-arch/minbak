@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>StayPick AI - 나만의 여행 큐레이터</title>
+    
+    <link rel="preconnect" href="https://script.google.com">
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -130,6 +135,7 @@
             <div class="flex justify-between items-end mb-4"><h3 class="font-bold text-lg text-dark">숙소 리스트</h3><span id="total-count" class="text-xs text-gray-400">Loading...</span></div>
             <div id="main-list" class="space-y-5">
                 <div class="animate-pulse flex space-x-4 mb-4"><div class="rounded-xl bg-gray-200 h-24 w-24"></div><div class="flex-1 space-y-2 py-1"><div class="h-4 bg-gray-200 rounded w-3/4"></div><div class="h-4 bg-gray-200 rounded w-1/2"></div></div></div>
+                <div class="animate-pulse flex space-x-4 mb-4"><div class="rounded-xl bg-gray-200 h-24 w-24"></div><div class="flex-1 space-y-2 py-1"><div class="h-4 bg-gray-200 rounded w-3/4"></div><div class="h-4 bg-gray-200 rounded w-1/2"></div></div></div>
             </div>
         </section>
 
@@ -202,30 +208,95 @@
         let currentSort = 'recommend';
         let currentLocation = 'all';
 
-        // [최적화 핵심] window.onload 대신 DOMContentLoaded 사용 (이미지 로딩 전 데이터 호출)
+        // [최적화 2] 캐시 키 및 유효시간 (24시간)
+        const CLIENT_CACHE_KEY = 'staypick_client_v1';
+        const CACHE_EXPIRY = 24 * 60 * 60 * 1000; 
+
+        // [최적화 3] DOMContentLoaded 사용 (이미지 로딩 대기 X)
         document.addEventListener("DOMContentLoaded", async function() {
-            try {
-                const response = await fetch(API_URL);
-                const data = await response.json();
-                initData(data);
-            } catch (error) {
-                console.error("Error fetching data:", error);
-                document.getElementById('main-list').innerHTML = '<div class="text-center py-10 text-red-400">데이터를 불러오는데 실패했습니다.<br>잠시 후 다시 시도해주세요.</div>';
-                document.getElementById('total-count').innerText = "Error";
+            // 브라우저 캐시 확인
+            const cachedData = loadFromClientCache();
+
+            if (cachedData) {
+                console.log("⚡ 로컬 캐시 데이터 사용 (즉시 로딩)");
+                // 화면 즉시 렌더링
+                initData(cachedData); 
+                // 백그라운드에서 최신 데이터 업데이트
+                fetchDataInBackground();
+            } else {
+                console.log("🌐 서버 데이터 요청 중...");
+                await fetchDataFromServer();
             }
+
             document.getElementById('search-input').addEventListener('input', handleSearch);
         });
 
-        function initData(data) {
-            // 스프레드시트의 한글 헤더를 내부 변수(영문)로 변환
-            allAccommodations = data.map((item, index) => {
+        // --- 클라이언트 캐시 관리 함수 ---
+        function saveToClientCache(data) {
+            try {
+                const payload = {
+                    timestamp: new Date().getTime(),
+                    data: data
+                };
+                localStorage.setItem(CLIENT_CACHE_KEY, JSON.stringify(payload));
+            } catch (e) {
+                console.warn("캐시 저장 실패 (용량 초과 가능성):", e);
+            }
+        }
+
+        function loadFromClientCache() {
+            const record = localStorage.getItem(CLIENT_CACHE_KEY);
+            if (!record) return null;
+            
+            try {
+                const parsed = JSON.parse(record);
+                const now = new Date().getTime();
+                // 유효기간 지났으면 폐기
+                if (now - parsed.timestamp > CACHE_EXPIRY) {
+                    localStorage.removeItem(CLIENT_CACHE_KEY);
+                    return null;
+                }
+                return parsed.data;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function fetchDataFromServer() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
                 
-                // 가격이 "61,135원" 같은 문자열일 경우 숫자만 추출
+                // 데이터 받아오면 저장 후 렌더링
+                saveToClientCache(data);
+                initData(data);
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                if(allAccommodations.length === 0) {
+                    document.getElementById('main-list').innerHTML = '<div class="text-center py-10 text-red-400">데이터를 불러오는데 실패했습니다.<br>잠시 후 다시 시도해주세요.</div>';
+                    document.getElementById('total-count').innerText = "Error";
+                }
+            }
+        }
+
+        // 백그라운드 업데이트 (사용자 방해 없이 최신화)
+        async function fetchDataInBackground() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                saveToClientCache(data); // 다음 방문을 위해 최신 데이터 저장
+                console.log("🔄 백그라운드 데이터 갱신 완료");
+            } catch(e) { console.log("백그라운드 갱신 실패 (무시됨)"); }
+        }
+
+        function initData(data) {
+            // 데이터 가공
+            allAccommodations = data.map((item, index) => {
                 const rawPrice = item['1박 최저 요금'] || item['가격(원)'] || item.price || "0";
                 const cleanPrice = typeof rawPrice === 'string' ? parseInt(rawPrice.replace(/[^0-9]/g, ''), 10) : rawPrice;
 
                 return {
-                    id: index, // 고유 ID 부여
+                    id: index,
                     name: item['업체명'] || item['상품명'] || item.name || "이름 없음",
                     location: item['국가/도시'] || item.location || "", 
                     intro: item['한줄 소개'] || item['주요 특징'] || item.intro || "",
@@ -235,22 +306,17 @@
                     amenities: item['핵심 편의시설'] || item.amenities || "",
                     image: item.image || `https://source.unsplash.com/random/300x300/?hotel,room,${index}`,
                     link: item.link || '#',
-                    recommendCount: 0,
+                    recommendCount: item.recommendCount || 0,
                     comments: item.comments || []
                 };
             });
 
-            // 데이터에 존재하는 국가만 추출하여 필터 메뉴 생성
             generateLocationDropdown();
-
-            applyUnifiedFilter(); // 초기 렌더링
+            applyUnifiedFilter();
         }
 
-        // --- 지역 필터 자동 생성 함수 (국기 업데이트 완료) ---
         function generateLocationDropdown() {
             const dropdown = document.getElementById('location-dropdown');
-            
-            // 1. 데이터에서 '국가' 부분만 추출
             const countries = new Set();
             allAccommodations.forEach(item => {
                 if (item.location) {
@@ -259,12 +325,11 @@
                 }
             });
 
-            // 2. 드롭다운 초기화 및 '전체보기' 버튼 추가
-            dropdown.innerHTML = `
+            // HTML 문자열 생성 (DOM 조작 최소화)
+            let dropdownHTML = `
                 <button onclick="changeLocation('all')" class="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 text-dark font-medium border-b border-gray-50">전체보기</button>
             `;
 
-            // 3. 추출한 국가별 버튼 생성 (모든 국기 코드 포함)
             const flags = {
                 '영국': '🇬🇧', '프랑스': '🇫🇷', '이탈리아': '🇮🇹', '미국': '🇺🇸', '일본': '🇯🇵', 
                 '스위스': '🇨🇭', '스페인': '🇪🇸', '체코': '🇨🇿', '오스트리아': '🇦🇹', '포르투갈': '🇵🇹',
@@ -273,17 +338,17 @@
             };
             
             countries.forEach(country => {
-                // 매핑된 국기가 없으면 기본 아이콘 사용
                 const flag = flags[country] || '🌐';
-                dropdown.innerHTML += `
+                dropdownHTML += `
                     <button onclick="changeLocation('${country}')" class="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 text-gray-500 transition-colors">
                         <span class="inline-block w-5 text-center mr-1">${flag}</span> ${country}
                     </button>
                 `;
             });
+            
+            dropdown.innerHTML = dropdownHTML;
         }
 
-        // --- 기존 필터 로직 ---
         function changeSort(type, btnElement) {
             currentSort = type;
             const buttons = document.querySelectorAll('#sort-filter-container button');
@@ -293,7 +358,6 @@
             });
             btnElement.classList.remove('bg-white', 'text-gray-500', 'border-gray-200');
             btnElement.classList.add('active', 'bg-dark', 'text-white', 'border-dark');
-            
             applyUnifiedFilter();
         }
 
@@ -306,10 +370,8 @@
             currentLocation = loc;
             const btnText = loc === 'all' ? '모든 지역' : loc;
             document.getElementById('current-loc-text').innerText = btnText;
-            
             document.getElementById('location-dropdown').classList.add('hidden');
             
-            // 동적으로 생성된 버튼들의 스타일 업데이트
             const options = document.querySelectorAll('#location-dropdown button');
             options.forEach(opt => {
                 if(opt.innerText.includes(loc) || (loc === 'all' && opt.innerText.includes('전체'))) {
@@ -320,20 +382,14 @@
                     opt.classList.add('text-gray-500');
                 }
             });
-
             applyUnifiedFilter();
         }
 
-        // 통합 필터 적용 함수
         function applyUnifiedFilter() {
             let result = [...allAccommodations];
-
-            // 1. 지역 필터링 (데이터의 location에 선택한 국가명이 포함되는지 확인)
             if (currentLocation !== 'all') {
                 result = result.filter(item => item.location.includes(currentLocation));
             }
-
-            // 2. 정렬 적용
             if (currentSort === 'price') {
                 result.sort((a, b) => a.price - b.price);
             } else if (currentSort === 'recommend') {
@@ -343,7 +399,6 @@
             } else if (currentSort === 'reviews') { 
                 result.sort((a, b) => b.reviewCount - a.reviewCount);
             }
-
             filteredAccommodations = result;
             renderMainList(filteredAccommodations);
         }
@@ -354,7 +409,6 @@
                 applyUnifiedFilter();
                 return;
             }
-
             filteredAccommodations = allAccommodations.filter(item => 
                 item.name.toLowerCase().includes(query) || 
                 item.location.toLowerCase().includes(query) ||
@@ -363,22 +417,27 @@
             renderMainList(filteredAccommodations);
         }
 
-        // --- 리스트 렌더링 ---
+        // [최적화 4] DOM 업데이트 방식 개선 (배치 처리)
         function renderMainList(data) {
             const listEl = document.getElementById('main-list');
             document.getElementById('total-count').innerText = `${data.length}개`;
-            listEl.innerHTML = '';
-            if (data.length === 0) { listEl.innerHTML = '<div class="text-center py-10 text-gray-400">검색 결과가 없습니다.</div>'; return; }
+            
+            if (data.length === 0) { 
+                listEl.innerHTML = '<div class="text-center py-10 text-gray-400">검색 결과가 없습니다.</div>'; 
+                return; 
+            }
+            
+            // HTML 문자열을 메모리에 먼저 모음 (성능 향상)
+            let itemsHTML = '';
             
             data.forEach((item, idx) => {
                 const priceFormatted = new Intl.NumberFormat('ko-KR').format(item.price);
                 const amenitiesStr = typeof item.amenities === 'string' ? item.amenities : "";
                 const amenitiesTags = amenitiesStr.split(',').slice(0, 3).map(tag => `<span class="inline-block bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0.5 rounded-[4px] mr-1 mb-1">${tag.trim()}</span>`).join('');
-                
                 const isLiked = localStorage.getItem(`liked_${item.id}`) ? 'text-primary' : 'text-gray-400 hover:text-primary';
 
-                const html = `
-                    <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex gap-4 animate-fade-in-up hover:shadow-md transition relative group" style="animation-delay: ${idx * 0.05}s">
+                itemsHTML += `
+                    <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex gap-4 animate-fade-in-up hover:shadow-md transition relative group" style="animation-delay: ${Math.min(idx * 0.05, 1.0)}s">
                         <div class="w-24 h-24 rounded-lg overflow-hidden shrink-0 relative bg-gray-100">
                             <img src="${item.image}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" loading="lazy">
                             <div class="absolute top-0 left-0 bg-black/50 backdrop-blur-[1px] text-white text-[9px] px-1.5 py-0.5 rounded-br-lg">${item.location}</div>
@@ -412,11 +471,12 @@
                         </div>
                         <a href="${item.link}" target="_blank" class="absolute inset-0 z-10"></a>
                     </div>`;
-                listEl.innerHTML += html;
             });
+            
+            // 한 번에 DOM 업데이트
+            listEl.innerHTML = itemsHTML;
         }
 
-        // --- 기능 로직 ---
         function toggleRecommend(id, btnElement) {
             const storageKey = `liked_${id}`;
             if (localStorage.getItem(storageKey)) {
@@ -431,6 +491,8 @@
                 btnElement.classList.add('text-primary');
                 btnElement.querySelector('.like-count').innerText = item.recommendCount;
                 localStorage.setItem(storageKey, 'true');
+
+                saveToClientCache(allAccommodations); // 로컬 업데이트
 
                 fetch(API_URL, {
                     method: 'POST',
@@ -475,8 +537,6 @@
             const modal = document.getElementById('success-modal');
             modal.classList.remove('modal-hidden');
             modal.classList.add('modal-visible');
-            
-            // 1.5초 후 자동 닫기
             setTimeout(() => {
                 modal.classList.remove('modal-visible');
                 modal.classList.add('modal-hidden');
@@ -497,13 +557,12 @@
                 item.commentCount = item.comments.length; 
                 
                 input.value = '';
-                openCommentModal(currentModalId); // 댓글 목록 갱신
-                applyUnifiedFilter(); // 메인 리스트(댓글수 반영) 갱신
-                
-                // 성공 알림 모달 표시
+                openCommentModal(currentModalId);
+                applyUnifiedFilter();
                 showSuccessModal();
 
-                // 서버 전송
+                saveToClientCache(allAccommodations); // 로컬 업데이트
+
                 fetch(API_URL, {
                     method: 'POST',
                     mode: 'no-cors',
@@ -587,7 +646,6 @@
         }
         function resetAI() { document.getElementById('result-container').classList.add('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
         
-        // 외부 클릭 시 드롭다운 닫기
         document.addEventListener('click', function(event) {
             const dropdown = document.getElementById('location-dropdown');
             const button = document.getElementById('loc-btn');
