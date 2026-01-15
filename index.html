@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>StayPick AI - 나만의 여행 큐레이터</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Pretendard', 'sans-serif'] },
+                    colors: { primary: '#FF385C', dark: '#222222', bg: '#F7F7F7' },
+                    boxShadow: { 'float': '0 6px 16px rgba(0,0,0,0.08)' },
+                    animation: { 'fade-in-up': 'fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards' },
+                    keyframes: { fadeInUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } } }
+                }
+            }
+        }
+    </script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .radio-option input:checked + div { border-color: #FF385C; background-color: #FFF0F3; color: #FF385C; font-weight: 700; box-shadow: 0 4px 12px rgba(255, 56, 92, 0.15); transform: translateY(-2px); }
+        .radio-option div { transition: all 0.2s ease-in-out; }
+        .filter-chip { transition: all 0.2s; white-space: nowrap; }
+        .filter-chip.active { background-color: #222222; color: white; border-color: #222222; font-weight: 700; }
+        
+        /* Modal Transition */
+        #comment-modal, #success-modal { transition: opacity 0.2s ease, visibility 0.2s ease; }
+        .modal-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+        .modal-visible { opacity: 1; visibility: visible; pointer-events: auto; }
+        
+        /* Dropdown Animation */
+        #location-dropdown { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: top right; }
+        #location-dropdown.hidden { opacity: 0; transform: scale(0.95); pointer-events: none; }
+        #location-dropdown:not(.hidden) { opacity: 1; transform: scale(1); pointer-events: auto; }
+        
+        /* 국가 코드 스타일 */
+        .country-code { 
+            display: inline-block; 
+            width: 24px; 
+            color: #9CA3AF; 
+            font-size: 10px; 
+            font-weight: 700; 
+            text-transform: uppercase;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-dark antialiased pb-10">
+
+    <div class="max-w-[600px] mx-auto bg-white min-h-screen shadow-2xl relative flex flex-col">
+        <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100 px-5 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-extrabold text-primary tracking-tight cursor-pointer" onclick="window.scrollTo({top:0, behavior:'smooth'})">StayPick<span class="text-dark font-normal">.AI</span></h1>
+            <button class="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-500"><i class="fa-regular fa-user"></i></button>
+        </header>
+
+        <section class="px-5 pt-6 pb-8 bg-gradient-to-b from-white to-gray-50">
+            <div class="mb-6"><h2 class="text-2xl font-bold leading-tight mb-2">어떤 여행을<br>꿈꾸시나요?</h2><p class="text-sm text-gray-500">빅데이터가 당신의 취향을 분석합니다.</p></div>
+            <div class="bg-white rounded-3xl p-6 shadow-float border border-gray-100 relative overflow-visible">
+                <div class="absolute -top-10 -right-10 w-40 h-40 bg-rose-100 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
+                <div class="space-y-8 relative z-10">
+                    <div>
+                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 block">01. Companions</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <label class="radio-option cursor-pointer block"><input type="radio" name="who" value="couple" class="hidden" checked><div class="border border-gray-100 bg-gray-50 rounded-2xl p-3 text-center h-full flex flex-col justify-center items-center hover:bg-white"><span class="text-xl mb-1">👩‍❤️‍👨</span><span class="text-xs font-medium text-gray-600">커플/로맨틱</span></div></label>
+                            <label class="radio-option cursor-pointer block"><input type="radio" name="who" value="friends" class="hidden"><div class="border border-gray-100 bg-gray-50 rounded-2xl p-3 text-center h-full flex flex-col justify-center items-center hover:bg-white"><span class="text-xl mb-1">👯‍♀️</span><span class="text-xs font-medium text-gray-600">우정 여행</span></div></label>
+                            <label class="radio-option cursor-pointer block"><input type="radio" name="who" value="solo" class="hidden"><div class="border border-gray-100 bg-gray-50 rounded-2xl p-3 text-center h-full flex flex-col justify-center items-center hover:bg-white"><span class="text-xl mb-1">🎒</span><span class="text-xs font-medium text-gray-600">나홀로</span></div></label>
+                            <label class="radio-option cursor-pointer block"><input type="radio" name="who" value="work" class="hidden"><div class="border border-gray-100 bg-gray-50 rounded-2xl p-3 text-center h-full flex flex-col justify-center items-center hover:bg-white"><span class="text-xl mb-1">💻</span><span class="text-xs font-medium text-gray-600">워케이션</span></div></label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 block">02. Priority</label>
+                        <div class="flex gap-2 overflow-x-auto no-scrollbar py-1 pl-1">
+                            <label class="radio-option cursor-pointer shrink-0"><input type="radio" name="vibe" value="photo" class="hidden" checked><div class="border border-gray-100 bg-gray-50 rounded-full px-5 py-3 text-xs font-medium text-gray-600">✨ 감성/인생샷</div></label>
+                            <label class="radio-option cursor-pointer shrink-0"><input type="radio" name="vibe" value="price" class="hidden"><div class="border border-gray-100 bg-gray-50 rounded-full px-5 py-3 text-xs font-medium text-gray-600">💰 가성비 최고</div></label>
+                            <label class="radio-option cursor-pointer shrink-0"><input type="radio" name="vibe" value="local" class="hidden"><div class="border border-gray-100 bg-gray-50 rounded-full px-5 py-3 text-xs font-medium text-gray-600">🏡 현지인 느낌</div></label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 block">03. Destination</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-location-dot absolute left-4 top-3.5 text-gray-400 text-sm"></i>
+                            <select id="pref-location" class="w-full bg-gray-50 border border-gray-100 rounded-xl pl-10 pr-8 py-3 text-sm font-semibold text-dark appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 transition">
+                                <option value="all">모든 여행지 (All Cities)</option>
+                                <option value="영국">🇬🇧 영국</option>
+                                <option value="프랑스">🇫🇷 프랑스</option>
+                                <option value="이탈리아">🇮🇹 이탈리아</option>
+                                <option value="스위스">🇨🇭 스위스</option>
+                                <option value="미국">🇺🇸 미국</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down absolute right-4 top-4 text-gray-300 text-xs pointer-events-none"></i>
+                        </div>
+                    </div>
+                    <button onclick="startAnalysis()" class="w-full bg-gradient-to-r from-primary to-rose-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-rose-200 hover:shadow-xl transition transform active:scale-[0.98] flex justify-center items-center group"><i class="fa-solid fa-wand-magic-sparkles mr-2 group-hover:rotate-12 transition"></i><span>AI 맞춤 숙소 추천받기</span></button>
+                </div>
+            </div>
+        </section>
+
+        <div id="loading-overlay" class="hidden fixed inset-0 z-50 bg-white/98 flex flex-col items-center justify-center px-8 text-center backdrop-blur-sm">
+            <div class="w-16 h-16 border-4 border-gray-100 border-t-primary rounded-full animate-spin mb-6"></div>
+            <h3 class="text-xl font-bold mb-2 text-dark">AI 분석 중...</h3>
+            <p id="loading-text" class="text-sm text-gray-500 animate-pulse">데이터베이스에 접속하고 있습니다.</p>
+        </div>
+
+        <section id="result-container" class="hidden px-5 mb-8 scroll-mt-20">
+            <div class="flex items-center justify-between mb-4"><h3 class="font-bold text-xl flex items-center"><span class="text-primary mr-2"><i class="fa-solid fa-crown"></i></span> AI Top 3 Picks</h3><button onclick="resetAI()" class="text-xs text-gray-400 underline">다시하기</button></div>
+            <div id="recommendation-list" class="flex gap-4 overflow-x-auto no-scrollbar pb-6 px-1 -mx-1 snap-x snap-mandatory"></div>
+            <hr class="border-gray-100">
+        </section>
+
+        <section class="px-5 flex-1 pb-10">
+            <div class="sticky top-[70px] z-30 bg-white/95 backdrop-blur -mx-5 px-5 border-b border-gray-50 mb-4 shadow-sm">
+                <div class="relative py-3">
+                    <input type="text" id="search-input" placeholder="숙소명, 지역, 편의시설 검색" class="w-full bg-gray-100 border-none rounded-full py-3 pl-11 pr-4 text-sm text-dark placeholder-gray-400 focus:ring-2 focus:ring-primary/50 transition"><i class="fa-solid fa-magnifying-glass absolute left-4 top-6 text-gray-400"></i>
+                </div>
+                
+                <div class="flex justify-between items-center pb-3">
+                    <div class="flex gap-2 overflow-x-auto no-scrollbar flex-1 mr-2" id="sort-filter-container">
+                        <button onclick="changeSort('recommend', this)" class="filter-chip active border border-gray-200 bg-white text-dark px-3 py-1.5 rounded-full text-xs font-medium shrink-0">추천순</button>
+                        <button onclick="changeSort('price', this)" class="filter-chip border border-gray-200 bg-white text-gray-500 px-3 py-1.5 rounded-full text-xs font-medium shrink-0">최저가순</button>
+                        <button onclick="changeSort('reviews', this)" class="filter-chip border border-gray-200 bg-white text-gray-500 px-3 py-1.5 rounded-full text-xs font-medium shrink-0">리뷰많은순</button>
+                        <button onclick="changeSort('rating', this)" class="filter-chip border border-gray-200 bg-white text-gray-500 px-3 py-1.5 rounded-full text-xs font-medium shrink-0">평점순</button>
+                    </div>
+
+                    <div class="relative shrink-0">
+                        <button onclick="toggleLocDropdown()" id="loc-btn" class="flex items-center gap-1 border border-gray-200 bg-white text-dark px-3 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-gray-50 transition">
+                            <span id="current-loc-text">모든 지역</span> <i class="fa-solid fa-chevron-down text-[10px] ml-1"></i>
+                        </button>
+                        
+                        <div id="location-dropdown" class="hidden absolute right-0 top-full mt-2 w-32 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden py-1 max-h-[300px] overflow-y-auto custom-scrollbar">
+                            </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-end mb-4"><h3 class="font-bold text-lg text-dark">숙소 리스트</h3><span id="total-count" class="text-xs text-gray-400">Loading...</span></div>
+            <div id="main-list" class="space-y-5">
+                <div class="animate-pulse flex space-x-4 mb-4"><div class="rounded-xl bg-gray-200 h-24 w-24"></div><div class="flex-1 space-y-2 py-1"><div class="h-4 bg-gray-200 rounded w-3/4"></div><div class="h-4 bg-gray-200 rounded w-1/2"></div></div></div>
+                <div class="animate-pulse flex space-x-4 mb-4"><div class="rounded-xl bg-gray-200 h-24 w-24"></div><div class="flex-1 space-y-2 py-1"><div class="h-4 bg-gray-200 rounded w-3/4"></div><div class="h-4 bg-gray-200 rounded w-1/2"></div></div></div>
+                <div class="animate-pulse flex space-x-4 mb-4"><div class="rounded-xl bg-gray-200 h-24 w-24"></div><div class="flex-1 space-y-2 py-1"><div class="h-4 bg-gray-200 rounded w-3/4"></div><div class="h-4 bg-gray-200 rounded w-1/2"></div></div></div>
+            </div>
+        </section>
+
+        <div id="comment-modal" class="modal-hidden fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeCommentModal()"></div>
+            <div class="bg-white w-full max-w-[500px] h-[85vh] sm:h-auto sm:max-h-[80vh] sm:rounded-2xl rounded-t-2xl z-10 flex flex-col relative shadow-2xl">
+                <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-white rounded-t-2xl">
+                    <h3 class="font-bold text-lg">📝 이용자 리뷰</h3>
+                    <button onclick="closeCommentModal()" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="modal-comments-list" class="flex-1 overflow-y-auto p-5 space-y-4 bg-gray-50"></div>
+                <div class="p-5 border-t border-gray-100 bg-white sm:rounded-b-2xl">
+                    <div class="relative">
+                        <textarea id="comment-input" class="w-full bg-gray-100 border-none rounded-xl p-4 text-sm focus:ring-2 focus:ring-primary/20 focus:bg-white transition resize-none h-24" placeholder="솔직한 경험을 남겨주세요."></textarea>
+                        <button onclick="submitComment()" class="absolute bottom-3 right-3 bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-rose-600 transition">등록하기</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="success-modal" class="modal-hidden fixed inset-0 z-[60] flex items-center justify-center px-4">
+            <div class="bg-white rounded-2xl shadow-2xl p-6 text-center w-64 transform transition-all scale-100 relative overflow-hidden">
+                <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3 text-green-500 text-xl">
+                    <i class="fa-solid fa-check"></i>
+                </div>
+                <h4 class="font-bold text-dark text-base mb-1">등록 완료!</h4>
+                <p class="text-xs text-gray-500">소중한 후기가 등록되었습니다.</p>
+            </div>
+        </div>
+
+        <section class="px-5 pb-8">
+            <a href="https://blog.naver.com/example" target="_blank" class="block w-full group">
+                <div class="bg-gray-900 rounded-2xl p-5 relative overflow-hidden shadow-lg transform transition group-hover:scale-[0.99]">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-gray-800 rounded-full mix-blend-overlay filter blur-2xl opacity-50 -mr-10 -mt-10"></div>
+                    <div class="relative z-10 flex items-center justify-between">
+                        <div>
+                            <span class="text-[10px] font-bold text-primary uppercase tracking-widest mb-1 block">EXPERT INSIGHTS</span>
+                            <h4 class="text-white font-bold text-lg leading-snug">실패 없는 여행을 위한<br>전문가 숙소 분석 보기</h4>
+                            <p class="text-gray-400 text-xs mt-2 group-hover:text-gray-300 transition">더 자세한 리뷰와 꿀팁을 확인하세요</p>
+                        </div>
+                        <div class="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white group-hover:bg-primary group-hover:text-white transition duration-300">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </section>
+
+        <footer class="bg-gray-50 pt-8 pb-8 px-5 border-t border-gray-100 mt-auto">
+            <div class="text-[10px] text-gray-400 leading-relaxed text-center">
+                <p class="mb-2">본 서비스는 파트너스 활동의 일환으로 수수료를 제공받을 수 있습니다.</p>
+                <p class="font-bold text-gray-300">© 2026 StayPick AI.</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // ============================================
+        // ⚠️ [새 배포] 후 발급받은 '웹 앱 URL'을 입력하세요!
+        const API_URL = "https://script.google.com/macros/s/AKfycbxaNuypG4v7gFbKEMYILXEBpZkqH9lJhkUbGmRJO7HNQWcyFPT5Pj9nhBnNc9RnsrTBkw/exec"; 
+        // ============================================
+
+        let allAccommodations = [];
+        let filteredAccommodations = [];
+        let currentModalId = null;
+        let currentSort = 'recommend';
+        let currentLocation = 'all';
+
+        // 국가 코드 매핑 (아이콘 대신 텍스트 코드 사용)
+        const countryCodes = {
+            '미국': 'US', '프랑스': 'FR', '이탈리아': 'IT', '영국': 'GB', '스위스': 'CH',
+            '스페인': 'ES', '체코': 'CZ', '오스트리아': 'AT', '포르투갈': 'PT',
+            '헝가리': 'HU', '네덜란드': 'NL', '독일': 'DE', '그리스': 'GR', '호주': 'AU',
+            '한국': 'KR', '일본': 'JP', '대만': 'TW', '베트남': 'VN', '태국': 'TH'
+        };
+
+        window.onload = async function() {
+            document.getElementById('search-input').addEventListener('input', handleSearch);
+
+            // [속도 개선] 1. 로컬 스토리지 확인 (새로고침 시 즉시 로딩)
+            const cachedData = sessionStorage.getItem('staypick_data');
+            const cachedTime = sessionStorage.getItem('staypick_time');
+            const now = new Date().getTime();
+
+            // 캐시가 있고, 1시간(3600000ms) 이내라면 캐시 사용
+            if (cachedData && cachedTime && (now - cachedTime < 3600000)) {
+                console.log("Using Cached Data (Fast Load)");
+                initData(JSON.parse(cachedData));
+            } else {
+                console.log("Fetching New Data");
+                await fetchData();
+            }
+        };
+
+        async function fetchData() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                
+                // [속도 개선] 2. 데이터 받아오면 로컬 스토리지에 저장
+                sessionStorage.setItem('staypick_data', JSON.stringify(data));
+                sessionStorage.setItem('staypick_time', new Date().getTime());
+                
+                initData(data);
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                document.getElementById('main-list').innerHTML = '<div class="text-center py-10 text-red-400">데이터 로드 실패. 다시 시도해주세요.</div>';
+                document.getElementById('total-count').innerText = "Error";
+            }
+        }
+
+        function initData(data) {
+            allAccommodations = data.map((item, index) => {
+                const rawPrice = item['1박 최저 요금'] || item['가격(원)'] || item.price || "0";
+                const cleanPrice = typeof rawPrice === 'string' ? parseInt(rawPrice.replace(/[^0-9]/g, ''), 10) : rawPrice;
+
+                return {
+                    id: index,
+                    name: item['업체명'] || item['상품명'] || item.name || "이름 없음",
+                    location: item['국가/도시'] || item.location || "", 
+                    intro: item['한줄 소개'] || item['주요 특징'] || item.intro || "",
+                    price: cleanPrice,
+                    rating: item['평점'] || item.rating || 0,
+                    reviewCount: item['리뷰'] || item['후기수'] || item.reviewCount || 0,
+                    amenities: item['핵심 편의시설'] || item.amenities || "",
+                    image: item.image || `https://source.unsplash.com/random/300x300/?hotel,room,${index}`,
+                    link: item.link || '#',
+                    recommendCount: 0,
+                    comments: item.comments || []
+                };
+            });
+
+            generateLocationDropdown();
+            applyUnifiedFilter();
+        }
+
+        function generateLocationDropdown() {
+            const dropdown = document.getElementById('location-dropdown');
+            const countries = new Set();
+            allAccommodations.forEach(item => {
+                if (item.location) {
+                    const countryName = item.location.split('/')[0].trim();
+                    if(countryName) countries.add(countryName);
+                }
+            });
+
+            dropdown.innerHTML = `
+                <button onclick="changeLocation('all')" class="w-full text-left px-4 py-3 text-xs hover:bg-gray-50 text-dark font-medium border-b border-gray-50 flex items-center">
+                    <span class="w-6 text-center mr-2 font-bold">ALL</span> 전체보기
+                </button>
+            `;
+
+            countries.forEach(country => {
+                // [수정] 아이콘 대신 국가 코드(US, FR 등) 사용
+                const code = countryCodes[country] || country.substring(0, 2).toUpperCase(); 
+                
+                dropdown.innerHTML += `
+                    <button onclick="changeLocation('${country}')" class="w-full text-left px-4 py-2.5 text-xs hover:bg-gray-50 text-gray-500 transition-colors flex items-center">
+                        <span class="country-code mr-2">${code}</span> ${country}
+                    </button>
+                `;
+            });
+        }
+
+        function changeSort(type, btnElement) {
+            currentSort = type;
+            const buttons = document.querySelectorAll('#sort-filter-container button');
+            buttons.forEach(btn => {
+                btn.classList.remove('active', 'bg-dark', 'text-white', 'border-dark');
+                btn.classList.add('bg-white', 'text-gray-500', 'border-gray-200');
+            });
+            btnElement.classList.remove('bg-white', 'text-gray-500', 'border-gray-200');
+            btnElement.classList.add('active', 'bg-dark', 'text-white', 'border-dark');
+            applyUnifiedFilter();
+        }
+
+        function toggleLocDropdown() {
+            const dropdown = document.getElementById('location-dropdown');
+            dropdown.classList.toggle('hidden');
+        }
+
+        function changeLocation(loc) {
+            currentLocation = loc;
+            const btnText = loc === 'all' ? '모든 지역' : loc;
+            document.getElementById('current-loc-text').innerText = btnText;
+            document.getElementById('location-dropdown').classList.add('hidden');
+            
+            const options = document.querySelectorAll('#location-dropdown button');
+            options.forEach(opt => {
+                if(opt.innerText.includes(loc) || (loc === 'all' && opt.innerText.includes('전체'))) {
+                    opt.classList.add('text-primary', 'font-bold', 'bg-rose-50');
+                    opt.querySelector('.country-code')?.classList.add('text-primary');
+                } else {
+                    opt.classList.remove('text-primary', 'font-bold', 'bg-rose-50');
+                    opt.querySelector('.country-code')?.classList.remove('text-primary');
+                }
+            });
+            applyUnifiedFilter();
+        }
+
+        function applyUnifiedFilter() {
+            let result = [...allAccommodations];
+            if (currentLocation !== 'all') {
+                result = result.filter(item => item.location.includes(currentLocation));
+            }
+            if (currentSort === 'price') {
+                result.sort((a, b) => a.price - b.price);
+            } else if (currentSort === 'recommend') {
+                result.sort((a, b) => b.recommendCount - a.recommendCount);
+            } else if (currentSort === 'rating') {
+                result.sort((a, b) => b.rating - a.rating);
+            } else if (currentSort === 'reviews') { 
+                result.sort((a, b) => b.reviewCount - a.reviewCount);
+            }
+            filteredAccommodations = result;
+            renderMainList(filteredAccommodations);
+        }
+
+        function handleSearch(e) {
+            const query = e.target.value.toLowerCase().trim();
+            if (!query) { applyUnifiedFilter(); return; }
+
+            filteredAccommodations = allAccommodations.filter(item => 
+                item.name.toLowerCase().includes(query) || 
+                item.location.toLowerCase().includes(query) ||
+                item.amenities.toLowerCase().includes(query)
+            );
+            renderMainList(filteredAccommodations);
+        }
+
+        function renderMainList(data) {
+            const listEl = document.getElementById('main-list');
+            document.getElementById('total-count').innerText = `${data.length}개`;
+            listEl.innerHTML = '';
+            if (data.length === 0) { listEl.innerHTML = '<div class="text-center py-10 text-gray-400">검색 결과가 없습니다.</div>'; return; }
+            
+            data.forEach((item, idx) => {
+                const priceFormatted = new Intl.NumberFormat('ko-KR').format(item.price);
+                const amenitiesStr = typeof item.amenities === 'string' ? item.amenities : "";
+                const amenitiesTags = amenitiesStr.split(',').slice(0, 3).map(tag => `<span class="inline-block bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0.5 rounded-[4px] mr-1 mb-1">${tag.trim()}</span>`).join('');
+                const isLiked = localStorage.getItem(`liked_${item.id}`) ? 'text-primary' : 'text-gray-400 hover:text-primary';
+
+                const html = `
+                    <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex gap-4 animate-fade-in-up hover:shadow-md transition relative group" style="animation-delay: ${Math.min(idx * 0.05, 1.0)}s">
+                        <div class="w-24 h-24 rounded-lg overflow-hidden shrink-0 relative bg-gray-100">
+                            <img src="${item.image}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" loading="lazy">
+                            <div class="absolute top-0 left-0 bg-black/50 backdrop-blur-[1px] text-white text-[9px] px-1.5 py-0.5 rounded-br-lg">${item.location}</div>
+                        </div>
+                        <div class="flex-1 flex flex-col min-w-0">
+                            <div class="mb-1">
+                                <h4 class="font-bold text-dark text-sm truncate pr-4">${item.name}</h4>
+                                <p class="text-xs text-gray-400 truncate mt-0.5">${item.intro}</p>
+                            </div>
+                            <div class="mb-2 flex flex-wrap">${amenitiesTags}</div>
+                            <div class="mt-auto flex justify-between items-end border-t border-gray-50 pt-2 relative z-20">
+                                <div class="flex items-center gap-3">
+                                    <button onclick="toggleRecommend(${item.id}, this)" class="flex items-center gap-1 text-xs font-medium transition ${isLiked}">
+                                        <i class="fa-solid fa-thumbs-up"></i> <span class="like-count">${item.recommendCount}</span>
+                                    </button>
+                                    <span class="text-gray-200 text-[10px]">|</span>
+                                    <button onclick="openCommentModal(${item.id})" class="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-dark transition">
+                                        <i class="fa-solid fa-comment-dots"></i> <span>${item.comments.length}</span>
+                                    </button>
+                                </div>
+                                <div class="text-right pointer-events-none">
+                                    <div class="flex items-center justify-end mb-0.5">
+                                        <i class="fa-solid fa-star text-yellow-400 text-[10px] mr-1"></i>
+                                        <span class="text-xs font-bold text-dark mr-1">${item.rating}</span>
+                                        <span class="text-[10px] text-gray-400">(${item.reviewCount})</span>
+                                    </div>
+                                    <span class="text-base font-bold text-primary">₩${priceFormatted}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <a href="${item.link}" target="_blank" class="absolute inset-0 z-10"></a>
+                    </div>`;
+                listEl.innerHTML += html;
+            });
+        }
+
+        function toggleRecommend(id, btnElement) {
+            const storageKey = `liked_${id}`;
+            if (localStorage.getItem(storageKey)) { alert("이미 추천하셨습니다!"); return; }
+            const item = allAccommodations.find(i => i.id === id);
+            if (item) {
+                item.recommendCount++;
+                btnElement.classList.remove('text-gray-400');
+                btnElement.classList.add('text-primary');
+                btnElement.querySelector('.like-count').innerText = item.recommendCount;
+                localStorage.setItem(storageKey, 'true');
+                // 좋아요는 실시간성 중요하므로 API 호출 (에러나도 UI는 성공 처리)
+                fetch(API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'like', id: id })
+                }).catch(err => console.error(err));
+            }
+        }
+
+        function openCommentModal(id) {
+            currentModalId = id;
+            const item = allAccommodations.find(i => i.id === id);
+            const list = document.getElementById('modal-comments-list');
+            list.innerHTML = '';
+            if (!item.comments || item.comments.length === 0) {
+                list.innerHTML = '<div class="text-center text-gray-400 text-sm py-10">아직 작성된 리뷰가 없습니다.<br>첫 번째 리뷰를 남겨보세요!</div>';
+            } else {
+                [...item.comments].reverse().forEach(c => {
+                    list.innerHTML += `<div class="bg-white p-3 rounded-xl border border-gray-100 shadow-sm"><p class="text-sm text-dark mb-1">${c.text}</p><span class="text-[10px] text-gray-400">${c.date}</span></div>`;
+                });
+            }
+            const modal = document.getElementById('comment-modal');
+            modal.classList.remove('modal-hidden');
+            modal.classList.add('modal-visible');
+        }
+
+        function closeCommentModal() {
+            const modal = document.getElementById('comment-modal');
+            modal.classList.remove('modal-visible');
+            modal.classList.add('modal-hidden');
+            currentModalId = null;
+        }
+
+        function showSuccessModal() {
+            const modal = document.getElementById('success-modal');
+            modal.classList.remove('modal-hidden');
+            modal.classList.add('modal-visible');
+            setTimeout(() => { modal.classList.remove('modal-visible'); modal.classList.add('modal-hidden'); }, 1500);
+        }
+
+        function submitComment() {
+            const input = document.getElementById('comment-input');
+            const text = input.value.trim();
+            if (!text) { alert("내용을 입력해주세요."); return; }
+            
+            const item = allAccommodations.find(i => i.id === currentModalId);
+            if (item) {
+                const today = new Date().toISOString().split('T')[0];
+                if (!item.comments) item.comments = [];
+                item.comments.push({ text: text, date: today });
+                input.value = '';
+                openCommentModal(currentModalId);
+                applyUnifiedFilter();
+                showSuccessModal();
+                
+                // 로컬 캐시 데이터도 업데이트 (중요: 그래야 새로고침 시에도 댓글 보임)
+                sessionStorage.setItem('staypick_data', JSON.stringify(allAccommodations));
+
+                fetch(API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'comment', id: currentModalId, text: text, date: today })
+                }).catch(err => console.error(err));
+            }
+        }
+
+        // AI 추천 로직 (생략 없이 유지)
+        function startAnalysis() {
+            if(allAccommodations.length === 0) { alert("데이터를 불러오는 중입니다. 잠시만 기다려주세요."); return; }
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            const msgs = ["여행 스타일 분석 중...", "위치 및 치안 데이터 대조...", "최적의 숙소 선별 완료!"];
+            let i = 0;
+            const interval = setInterval(() => { i++; if (i < msgs.length) document.getElementById('loading-text').innerText = msgs[i]; }, 800);
+            setTimeout(() => {
+                clearInterval(interval);
+                runRecommendation();
+                document.getElementById('loading-overlay').classList.add('hidden');
+                document.getElementById('result-container').classList.remove('hidden');
+                document.getElementById('result-container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 2500);
+        }
+
+        function runRecommendation() {
+            const who = document.querySelector('input[name="who"]:checked').value;
+            const vibe = document.querySelector('input[name="vibe"]:checked').value;
+            const loc = document.getElementById('pref-location').value;
+            
+            let scored = allAccommodations.map(item => {
+                if(loc !== 'all' && !item.location.includes(loc)) return null;
+                let score = item.rating * 10;
+                const text = (item.intro + item.amenities + item.name).toLowerCase();
+                
+                if (who === 'couple' && (text.includes('뷰') || text.includes('로맨틱'))) score += 20;
+                if (who === 'friends' && (text.includes('넓') || text.includes('파티'))) score += 20;
+                if (who === 'solo' && (text.includes('치안') || text.includes('역'))) score += 25;
+                if (who === 'work' && (text.includes('책상') || text.includes('와이파이'))) score += 25;
+                if (vibe === 'price') score += (300000 - item.price) / 5000;
+                if (vibe === 'photo' && text.includes('감성')) score += 15;
+                if (vibe === 'local' && text.includes('현지')) score += 15;
+                score += (item.recommendCount * 0.5);
+                return { ...item, score: score };
+            }).filter(i => i !== null);
+            
+            scored.sort((a, b) => b.score - a.score);
+            renderRecommendations(scored.slice(0, 3));
+        }
+
+        function renderRecommendations(items) {
+            const container = document.getElementById('recommendation-list');
+            container.innerHTML = '';
+            if(items.length === 0) { container.innerHTML = '<div class="w-full text-center text-gray-400 py-4">조건에 맞는 숙소가 없습니다.</div>'; return; }
+            items.forEach((item, idx) => {
+                const price = new Intl.NumberFormat('ko-KR').format(item.price);
+                container.innerHTML += `
+                    <div class="snap-center shrink-0 w-[280px] bg-white rounded-2xl shadow-float overflow-hidden border border-gray-100 relative group">
+                        <div class="h-40 relative">
+                            <span class="absolute top-3 left-3 bg-primary text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm z-10">AI Match ${(98 - idx*2)}%</span>
+                            <img src="${item.image}" class="w-full h-full object-cover">
+                        </div>
+                        <div class="p-4">
+                            <h4 class="font-bold text-dark truncate mb-1">${item.name}</h4>
+                            <p class="text-xs text-gray-500 line-clamp-1 mb-2">${item.intro}</p>
+                            <div class="flex justify-between items-center border-t border-gray-50 pt-3">
+                                <span class="font-bold text-primary">₩${price}</span>
+                                <a href="${item.link}" target="_blank" class="bg-dark text-white text-xs font-bold px-3 py-1.5 rounded-lg">예약</a>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+        }
+        function resetAI() { document.getElementById('result-container').classList.add('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+        
+        document.addEventListener('click', function(event) {
+            const dropdown = document.getElementById('location-dropdown');
+            const button = document.getElementById('loc-btn');
+            if (!button.contains(event.target) && !dropdown.contains(event.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
